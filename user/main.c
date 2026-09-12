@@ -71,6 +71,7 @@ void System_Init(void)
     LCD_Init();
     LED_Init();
     DHT11_Init();
+    BEEP_Init();
 }
 // ================================================================
 // wifi_manager.c 或 main.c 中
@@ -158,7 +159,13 @@ void WiFi_Task(void *pvParameters)
              * ============================================================ */
             case NET_STATUS_CONNECTING:
                 UsartPrintf(USART1, "\r\n[MQTT] Connecting... (Count: %d)\r\n", ++g_mqtt_reconnect_count);
-                
+                if (!ESP8266_GetWiFiStatus()) {
+                        // ★ WiFi 断线，触发重连
+                        UsartPrintf(USART1, "\r\n[WiFi] Connection lost! (Count: %d)\r\n", ++g_wifi_lost_count);
+                        g_net_status = NET_STATUS_DISCONNECTED;
+                        subscribed = 0;
+                        break;
+                    }
                 // ★ 只发送 MQTT CONNECT，不等待 CONNACK
                 // CONNACK 由 ESP8266_MQTT_ParserTask 异步处理
                 if (ESP8266_MQTT_Connect(ONENET_PRODID, ONENET_DEVNAME, ONENET_APIKEY)) {
@@ -182,6 +189,7 @@ void WiFi_Task(void *pvParameters)
                 // ★ 检查 WiFi 状态（每 WIFI_CHECK_INTERVAL_MS 毫秒一次）
                 static TickType_t last_wifi_check = 0;
                 TickType_t now = xTaskGetTickCount();
+                
                 if (now - last_wifi_check > pdMS_TO_TICKS(WIFI_CHECK_INTERVAL_MS)) {
                     last_wifi_check = now;
                     
@@ -357,7 +365,7 @@ void OneNET_ProcessCommand(char *topic, char *payload, uint16_t len)
         UsartPrintf(USART1, "[OneNET] No 'LED' field\r\n");
     }
     // ★★★ 5. 解析 BEEP 控制（照写 LED） ★★★
-    beep_json = cJSON_GetObjectItem(params_json, "BEEP");
+    beep_json = cJSON_GetObjectItem(params_json, "Alarm");
     if (beep_json != NULL) {
         if (beep_json->type == cJSON_True) {
             // 蜂鸣器开

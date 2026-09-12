@@ -1,0 +1,72 @@
+.container{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.bubble-icon{
+  width: 120rpx;
+  height: 100rpx;
+}
+.title_bubble{
+  width: 600rpx;
+  height: 100rx;
+  background-color: #f7c21296;
+  border-radius: 40rpx;
+  padding: 80rpx 20rpx;
+  margin: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 0rpx 30rpx rgba(128, 114, 121, 0.726); 
+}
+.bubble_text{
+  display: flex;
+  flex-direction: column;
+}
+.text1{
+  font-size: 40rpx;
+  font-weight: bold;
+  text-indent: 30rpx;
+  margin: 10rpx;
+}
+.text2{
+  text-indent: 30rpx;
+  margin: 10rpx;
+}
+.bubble-group-container
+{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 50rpx;
+  padding: 30rpx;
+}
+.function-bubble{
+  width: 270rpx;
+  height: 290rpx;
+  background: #ffffff;
+  border-radius: 30rpx;
+  box-shadow: 0rpx 0rpx 30rpx rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 30rpx;
+  margin-top: 50rpx;
+}
+.icon{
+  width: 120rpx;
+  height: 120rpx;
+  margin: 30rpx;
+}
+.data-text{
+  text-align: right;
+}
+.data-title{
+  font-size: 30rpx;
+  color: #7f7f7f;
+}
+.data-value{
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #7f7f7f;
+}

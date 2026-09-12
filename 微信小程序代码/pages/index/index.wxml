@@ -1,0 +1,51 @@
+<view class="container">
+
+<!--第一个气泡：标题气泡-->
+<view class="title_bubble">
+  <view class="bubble_text">
+    <text class="text1">把握现在，就是创造未来</text>
+    <text class="text2">请开启你的学习之旅</text>
+  </view>
+  <image class="bubble-icon" src="/image/帆船.png"></image>
+</view>
+
+ <!--后四个气泡的容器-->
+  <view class="bubble-group-container">
+      <!--温度气泡-->
+    <view class="function-bubble">
+      <image class="icon" src="/image/Temp.png" />
+      <view class="data-text">
+        <view class="data-title">环境温度</view>
+        <view class="data-value">{{Temp}}℃</view>
+      </view>
+    </view>
+
+      <!--湿度气泡-->
+    <view class="function-bubble">
+      <image class="icon" src="/image/Hum.png" />
+      <view class="data-text">
+        <view class="data-title">环境湿度</view>
+        <view class="data-value">{{Hum}}%</view>
+      </view>
+    </view>
+
+      <!--报警气泡-->
+    <view class="function-bubble">
+      <image class="icon" src="/image/alarm.png" />
+      <view class="data-text">
+        <view class="data-title">报警器</view>
+      </view>
+      <switch class="toggle-switch" bindchange="Onenet_SetAlarmInfo"/>
+    </view>
+
+       <!--LED灯气泡-->
+    <view class="function-bubble">
+      <image class="icon" src="/image/LED.png" />
+      <view class="data-text">
+        <view class="data-title">LED灯</view>
+      </view>
+      <switch class="toggle-switch" bindchange="Onenet_SetLedInfo"/>
+    </view>     
+      
+  </view>
+</view>
