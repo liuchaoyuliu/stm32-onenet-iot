@@ -19,7 +19,10 @@
 #include "display_task.h"
 #include "key_task.h"
 #include "sensor_data.h"
-
+// ================================================================
+// ===== 调试开关 =====
+// ================================================================
+#define DEBUG_MONITOR_ENABLE   1   // 1=开启监控任务，0=关闭
 extern void LCD_ShowChineseString16(u16 x, u16 y, const char *str, u16 color);
 // ================================================================
 // ===== 断线统计 =====
@@ -291,6 +294,7 @@ void Network_Task(void *pvParameters)
         }
     }
 }
+#if DEBUG_MONITOR_ENABLE
 void Monitor_Task(void *pvParameters)
 {
     char stats_buffer[512];
@@ -320,6 +324,7 @@ void Monitor_Task(void *pvParameters)
         UsartPrintf(USART1, "====================================\r\n");
     }
 }
+#endif
 
 /**
  * @brief OneNET 下行指令处理函数
@@ -709,7 +714,9 @@ int main(void)
     xTaskCreate(Network_Task, "WiFi", 576, NULL, 2, &xNetworkTaskHandle);
     xTaskCreate(ESP8266_MQTT_ParserTask, "Parser", 500, NULL, 2, &xParserTaskHandle);
     xTaskCreate(Sensor_Task, "Sensor", 256, NULL, configMAX_PRIORITIES - 2, &xSensorTaskHandle);//优先级设置高点，防止打乱读取时序
+    #if DEBUG_MONITOR_ENABLE
     xTaskCreate(Monitor_Task, "Monitor", 512, NULL, 1, NULL);  // 最低优先级
+    #endif
     xTaskCreate(Display_Task, "Display", 512, NULL, 1,&xDisplayTaskHandle);   // ★ 新增
     xTaskCreate(Key_Task, "Key", 256, NULL, 1, &xKeyTaskHandle);           // ★ 新增
     vTaskStartScheduler();
