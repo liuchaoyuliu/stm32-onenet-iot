@@ -405,6 +405,21 @@
               <FileType>5</FileType>
               <FilePath>.\user\FreeRTOSConfig.h</FilePath>
             </File>
+            <File>
+              <FileName>display_task.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\user\display_task.c</FilePath>
+            </File>
+            <File>
+              <FileName>key_task.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\user\key_task.c</FilePath>
+            </File>
+            <File>
+              <FileName>sensor_data.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\user\sensor_data.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -769,6 +784,11 @@
               <FileName>beep.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\system\beep.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_runtimestats.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\system\bsp_runtimestats.c</FilePath>
             </File>
           </Files>
         </Group>

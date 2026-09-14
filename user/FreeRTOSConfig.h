@@ -91,9 +91,15 @@
 #define configMINIMAL_STACK_SIZE	( ( unsigned short ) 128 )
 #define configTOTAL_HEAP_SIZE		( ( size_t ) ( 20 * 1024 ) )
 #define configMAX_TASK_NAME_LEN		( 16 )
-#define configUSE_TRACE_FACILITY	0
+
 #define configUSE_16_BIT_TICKS		0
 #define configIDLE_SHOULD_YIELD		1
+
+#define configGENERATE_RUN_TIME_STATS     1
+#define configUSE_TRACE_FACILITY         1
+#define configUSE_STATS_FORMATTING_FUNCTIONS 1
+
+
 
 #define INCLUDE_xTaskGetSchedulerState    1
 #define configUSE_MUTEXES                1
@@ -128,10 +134,14 @@ configKERNEL_INTERRUPT_PRIORITY setting.  Here 15 corresponds to the lowest
 NVIC value of 255. */
 #define configLIBRARY_KERNEL_INTERRUPT_PRIORITY	15
 
-// 在文件末尾添加（重要！中断重定向
+// 在文件末尾添加
 #define xPortPendSVHandler   PendSV_Handler
 #define vPortSVCHandler      SVC_Handler
 #define xPortSysTickHandler  SysTick_Handler
-
+// 在 FreeRTOSConfig.h 末尾附近定义
+extern void ConfigureTimerForRunTimeStats(void);
+extern volatile unsigned long FreeRTOSRunTimeTicks;
+#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()  ConfigureTimerForRunTimeStats()
+#define portGET_RUN_TIME_COUNTER_VALUE()          FreeRTOSRunTimeTicks
 #endif /* FREERTOS_CONFIG_H */
 

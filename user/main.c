@@ -16,6 +16,10 @@
 //#include "upload_task.h"
 #include "dht11.h"
 #include  "beep.h"
+#include "display_task.h"
+#include "key_task.h"
+#include "sensor_data.h"
+
 extern void LCD_ShowChineseString16(u16 x, u16 y, const char *str, u16 color);
 // ================================================================
 // ===== 断线统计 =====
@@ -23,24 +27,10 @@ extern void LCD_ShowChineseString16(u16 x, u16 y, const char *str, u16 color);
 uint32_t g_wifi_lost_count = 0;        // WiFi 断线次数
 uint32_t g_mqtt_pingresp_timeout = 0;  // PINGRESP 超时次数
 uint32_t g_mqtt_reconnect_count = 0;   // MQTT 重连次数
-
-// ================================================================
-// ===== 全局变量定义 =====
-// ================================================================
-typedef struct {
-    int temp_int;
-    int humi_int;
-    uint8_t led_flag;
-    uint8_t alarm_flag;
-} SensorData_t;
-SensorData_t g_sensorData = {0, 0, 0, 0};   // 传感器数据（温度、湿度、LED、蜂鸣器状态）
-SemaphoreHandle_t g_dataMutex = NULL;        // 数据互斥锁，保护 g_sensorData
-
 // ================================================================
 // ===== 重连指数退避 =====
 // ================================================================
 uint32_t g_reconnect_delay = 5;   // 初始重连间隔 5 秒，失败后翻倍，最大 60 秒
-
 // ================================================================
 // ===== 时间间隔宏定义 =====
 // ================================================================
@@ -56,13 +46,11 @@ uint32_t g_reconnect_delay = 5;   // 初始重连间隔 5 秒，失败后翻倍，最大 60 秒
 TaskHandle_t xNetworkTaskHandle = NULL;       // WiFi 任务句柄
 TaskHandle_t xParserTaskHandle = NULL;     // MQTT 解析任务句柄
 TaskHandle_t xMonitorTaskHandle = NULL;    // 监控任务句柄
-//传感器任务句柄
-TaskHandle_t xSensorTaskHandle = NULL;
+TaskHandle_t xSensorTaskHandle = NULL;//传感器任务句柄
 // ================================================================
 // ===== 心跳时间戳 =====
 // ================================================================
 TickType_t g_last_ping_resp_time;   // 最后一次收到 PINGRESP 的时间戳
-
 // ================================================================
 // ===== MQTT Topic 定义 =====
 // ================================================================
@@ -305,19 +293,31 @@ void Network_Task(void *pvParameters)
 }
 void Monitor_Task(void *pvParameters)
 {
+    char stats_buffer[512];
+
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(5000));
-        
-        // 打印各任务状态
+
+        // ========== 1. 内存和栈水位 ==========
         UsartPrintf(USART1, "\r\n[Monitor] Heap: %d bytes\r\n", xPortGetFreeHeapSize());
-        UsartPrintf(USART1, "[Monitor] WiFi stack: %d\r\n", 
+        UsartPrintf(USART1, "[Monitor] WiFi stack: %d\r\n",
                     uxTaskGetStackHighWaterMark(xNetworkTaskHandle));
-        UsartPrintf(USART1, "[Monitor] Parser stack: %d\r\n", 
+        UsartPrintf(USART1, "[Monitor] Parser stack: %d\r\n",
                     uxTaskGetStackHighWaterMark(xParserTaskHandle));
         UsartPrintf(USART1, "[Monitor] Sensor stack: %d\r\n",
                     uxTaskGetStackHighWaterMark(xSensorTaskHandle));
         UsartPrintf(USART1, "[Monitor] Monitor stack: %d\r\n",
                     uxTaskGetStackHighWaterMark(NULL));
+        UsartPrintf(USART1, "[Monitor] Display stack: %d\r\n",
+                    uxTaskGetStackHighWaterMark(xDisplayTaskHandle));
+        UsartPrintf(USART1, "[Monitor] Key stack: %d\r\n",
+                    uxTaskGetStackHighWaterMark(xKeyTaskHandle));
+        
+        // ========== 2. 任务运行时间统计 ==========
+        vTaskGetRunTimeStats(stats_buffer);
+        UsartPrintf(USART1, "\r\n========== Run Time Stats ==========\r\n");
+        UsartPrintf(USART1, "%s\r\n", stats_buffer);
+        UsartPrintf(USART1, "====================================\r\n");
     }
 }
 
@@ -674,7 +674,7 @@ void Sensor_Task(void *pvParameters)
         
         if (result == 0) {
             // ★ 读取成功，打印温湿度
-            UsartPrintf(USART1, "[Sensor] Temp=%d C, Hum=%d %%\r\n", temp, humi);
+            UsartPrintf(USART1, "[Sensor] Temp=%d, Hum=%d\r\n", temp, humi);
             
             // ★★★ 更新全局数据（加锁保护） ★★★
             if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -700,18 +700,19 @@ int main(void)
     LCD_Clear(WHITE);
     LCD_ShowChineseString16(10, 10, "FreeRTOS温控", BLACK);
     LCD_ShowString(150, 10, 200, 24, 24, (u8*)"v1.0");
-    LCD_ShowString(10, 50, 200, 16, 16, (u8*)"WiFi Connecting...");
+    LCD_ShowString(10, 50, 200, 16, 16, (u8*)"Connecting...");
      // ★ 创建互斥锁
     g_dataMutex = xSemaphoreCreateMutex();
     if (g_dataMutex == NULL) {
         while(1);
     }
     xTaskCreate(Network_Task, "WiFi", 576, NULL, 2, &xNetworkTaskHandle);
-    xTaskCreate(ESP8266_MQTT_ParserTask, "Parser", 320, NULL, 2, &xParserTaskHandle);
+    xTaskCreate(ESP8266_MQTT_ParserTask, "Parser", 500, NULL, 2, &xParserTaskHandle);
     xTaskCreate(Sensor_Task, "Sensor", 256, NULL, configMAX_PRIORITIES - 2, &xSensorTaskHandle);//优先级设置高点，防止打乱读取时序
-    xTaskCreate(Monitor_Task, "Monitor", 256, NULL, 1, NULL);  // 最低优先级
+    xTaskCreate(Monitor_Task, "Monitor", 512, NULL, 1, NULL);  // 最低优先级
+    xTaskCreate(Display_Task, "Display", 512, NULL, 1,&xDisplayTaskHandle);   // ★ 新增
+    xTaskCreate(Key_Task, "Key", 256, NULL, 1, &xKeyTaskHandle);           // ★ 新增
     vTaskStartScheduler();
-    
     while(1);
 }
 
