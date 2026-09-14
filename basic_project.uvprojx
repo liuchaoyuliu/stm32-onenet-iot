@@ -405,11 +405,6 @@
               <FileType>5</FileType>
               <FilePath>.\user\FreeRTOSConfig.h</FilePath>
             </File>
-            <File>
-              <FileName>upload_task.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\user\upload_task.c</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>

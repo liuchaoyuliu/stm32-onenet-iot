@@ -13,7 +13,7 @@
 #include <string.h>
 #include "MqttKit.h"
 #include "Net_Status.h"
-#include "upload_task.h"
+//#include "upload_task.h"
 #include "dht11.h"
 #include  "beep.h"
 extern void LCD_ShowChineseString16(u16 x, u16 y, const char *str, u16 color);
@@ -27,6 +27,12 @@ uint32_t g_mqtt_reconnect_count = 0;   // MQTT 重连次数
 // ================================================================
 // ===== 全局变量定义 =====
 // ================================================================
+typedef struct {
+    int temp_int;
+    int humi_int;
+    uint8_t led_flag;
+    uint8_t alarm_flag;
+} SensorData_t;
 SensorData_t g_sensorData = {0, 0, 0, 0};   // 传感器数据（温度、湿度、LED、蜂鸣器状态）
 SemaphoreHandle_t g_dataMutex = NULL;        // 数据互斥锁，保护 g_sensorData
 
@@ -42,15 +48,16 @@ uint32_t g_reconnect_delay = 5;   // 初始重连间隔 5 秒，失败后翻倍，最大 60 秒
 #define PING_INTERVAL_MS          30000   // MQTT 心跳间隔：30 秒
 #define PINGRESP_TIMEOUT_MS       90000   // PINGRESP 超时阈值：90 秒
 #define SENSOR_INTERVAL_MS        5000    // 传感器采集间隔：5 秒
-#define STATS_PRINT_INTERVAL_MS   60000   // 断线统计打印间隔：60 秒   
+#define STATS_PRINT_INTERVAL_MS   60000   // 断线统计打印间隔：60 秒  
+#define UPLOAD_INTERVAL_MS    10000       //温湿度上传间隔10秒 
 // ================================================================
 // ===== 任务句柄 =====
 // ================================================================
-TaskHandle_t xWiFiTaskHandle = NULL;       // WiFi 任务句柄
-TaskHandle_t xUploadTaskHandle = NULL;     // 上报任务句柄
+TaskHandle_t xNetworkTaskHandle = NULL;       // WiFi 任务句柄
 TaskHandle_t xParserTaskHandle = NULL;     // MQTT 解析任务句柄
 TaskHandle_t xMonitorTaskHandle = NULL;    // 监控任务句柄
-
+//传感器任务句柄
+TaskHandle_t xSensorTaskHandle = NULL;
 // ================================================================
 // ===== 心跳时间戳 =====
 // ================================================================
@@ -59,6 +66,7 @@ TickType_t g_last_ping_resp_time;   // 最后一次收到 PINGRESP 的时间戳
 // ================================================================
 // ===== MQTT Topic 定义 =====
 // ================================================================
+#define TOPIC_PROPERTY_POST   "$sys/SQ8gfZ73EX/Test1/thing/property/post"
 #define TOPIC_PROPERTY_SET   "$sys/SQ8gfZ73EX/Test1/thing/property/set"   // 属性设置 Topic（订阅）
 const char *Topic_property_set_reply = "$sys/SQ8gfZ73EX/Test1/thing/property/set_reply";   // 属性设置回复 Topic（发布）
 void System_Init(void)
@@ -120,12 +128,12 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
  *       指数退避：5 → 10 → 20 → 40 → 60 秒（最大 60 秒）
  *       连接成功后重置为 5 秒
  */
-void WiFi_Task(void *pvParameters)
+void Network_Task(void *pvParameters)
 {
     char ip[20];                    // IP 地址缓冲区（预留）
     uint32_t retry_count = 0;       // WiFi 连接重试次数
     UsartPrintf(USART1, "\r\n========================================\r\n");
-    UsartPrintf(USART1, "[WiFi_Task] Started!\r\n");
+    UsartPrintf(USART1, "[Network_Task] Started!\r\n");
     UsartPrintf(USART1, "SSID: %s\r\n", WIFI_SSID);
     UsartPrintf(USART1, "========================================\r\n"); 
     // ★ 初始状态：WiFi 未连接
@@ -233,7 +241,45 @@ void WiFi_Task(void *pvParameters)
                         last_ping_time = now;
                     }
                 }
-                
+                // ★ 5. 数据上传
+                static TickType_t last_upload_time = 0;
+                now=xTaskGetTickCount();
+                if (now - last_upload_time > pdMS_TO_TICKS(UPLOAD_INTERVAL_MS)) {
+                    last_upload_time = now;
+
+                    if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                        int temp = g_sensorData.temp_int;
+                        int humi = g_sensorData.humi_int;
+                        uint8_t led = g_sensorData.led_flag;
+                        uint8_t alarm = g_sensorData.alarm_flag;
+                        xSemaphoreGive(g_dataMutex);
+
+                        char payload[256];
+                        sprintf(payload,
+                                "{\"id\":\"123\",\"params\":{"
+                                "\"Temp\":{\"value\":%d},"
+                                "\"Hum\":{\"value\":%d},"
+                                "\"Led\":{\"value\":%s},"
+                                "\"Alarm\":{\"value\":%s}"
+                                "}}",
+                                temp, humi,
+                                led ? "true" : "false",
+                                alarm ? "true" : "false");
+
+                        UsartPrintf(USART1, "[Upload] %s\r\n", payload);
+
+                        if (!ESP8266_MQTT_Publish(TOPIC_PROPERTY_POST, payload, 0)) {
+                            if (!ESP8266_MQTT_Publish(TOPIC_PROPERTY_POST, payload, 0)) {
+                                UsartPrintf(USART1, "[Upload] FAILED\r\n");
+                                g_net_status = NET_STATUS_CONNECTING;
+                                subscribed = 0;
+                                break;
+                            }
+                        } else {
+                            UsartPrintf(USART1, "[Upload] OK\r\n");
+                        }
+                    }
+                }
                 // ★★★ 每 STATS_PRINT_INTERVAL_MS打印一次断线统计 ★★★
                 static TickType_t last_stat_print = 0;
                 now = xTaskGetTickCount();
@@ -265,11 +311,13 @@ void Monitor_Task(void *pvParameters)
         // 打印各任务状态
         UsartPrintf(USART1, "\r\n[Monitor] Heap: %d bytes\r\n", xPortGetFreeHeapSize());
         UsartPrintf(USART1, "[Monitor] WiFi stack: %d\r\n", 
-                    uxTaskGetStackHighWaterMark(xWiFiTaskHandle));
-        UsartPrintf(USART1, "[Monitor] Upload stack: %d\r\n", 
-                    uxTaskGetStackHighWaterMark(xUploadTaskHandle));
+                    uxTaskGetStackHighWaterMark(xNetworkTaskHandle));
         UsartPrintf(USART1, "[Monitor] Parser stack: %d\r\n", 
                     uxTaskGetStackHighWaterMark(xParserTaskHandle));
+        UsartPrintf(USART1, "[Monitor] Sensor stack: %d\r\n",
+                    uxTaskGetStackHighWaterMark(xSensorTaskHandle));
+        UsartPrintf(USART1, "[Monitor] Monitor stack: %d\r\n",
+                    uxTaskGetStackHighWaterMark(NULL));
     }
 }
 
@@ -658,11 +706,10 @@ int main(void)
     if (g_dataMutex == NULL) {
         while(1);
     }
-    xTaskCreate(WiFi_Task, "WiFi", 1024, NULL, 1, &xWiFiTaskHandle);
-    xTaskCreate(Upload_Task, "Upload", 2048, NULL, 1, &xUploadTaskHandle);
-    xTaskCreate(ESP8266_MQTT_ParserTask, "Parser", 1024, NULL, 1, &xParserTaskHandle);
-    xTaskCreate(Sensor_Task, "Sensor", 512, NULL, configMAX_PRIORITIES - 2, NULL);//优先级设置高点，防止打乱读取时序
-    // xTaskCreate(Monitor_Task, "Monitor", 512, NULL, 0, NULL);  // 最低优先级
+    xTaskCreate(Network_Task, "WiFi", 576, NULL, 2, &xNetworkTaskHandle);
+    xTaskCreate(ESP8266_MQTT_ParserTask, "Parser", 320, NULL, 2, &xParserTaskHandle);
+    xTaskCreate(Sensor_Task, "Sensor", 256, NULL, configMAX_PRIORITIES - 2, &xSensorTaskHandle);//优先级设置高点，防止打乱读取时序
+    xTaskCreate(Monitor_Task, "Monitor", 256, NULL, 1, NULL);  // 最低优先级
     vTaskStartScheduler();
     
     while(1);

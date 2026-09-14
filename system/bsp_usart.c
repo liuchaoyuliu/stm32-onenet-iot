@@ -4,9 +4,9 @@
 #include <stdio.h>
 #include <semphr.h>
 #include "led.h"
+#include "beep.h"
 
-// ★ USART1 发送互斥锁
-static SemaphoreHandle_t usart1_tx_mutex = NULL;
+SemaphoreHandle_t xUart1Mutex;   //串口1发送互斥锁，防止多任务同时打印导致串口数据混乱
 // ================================================================
 // ===== DMA接收缓冲区 =====
 // ================================================================
@@ -136,6 +136,10 @@ void Usart1_Init(unsigned int baud)
     NVIC_Init(&nvicInitStruct);
 
     USART_Cmd(USART1, ENABLE);
+    xUart1Mutex = xSemaphoreCreateMutex();
+    if (xUart1Mutex == NULL) {
+        while(1); // 创建失败，系统无法运行
+    }
 }
 
 // ================================================================
@@ -257,12 +261,6 @@ void Usart_Init(void)
     Usart1_Init(USART1_BAUDRATE);
     Usart2_Init(USART2_BAUDRATE);
     ESP8266_Queue_Init();
-    // ★★★ 创建 USART1 发送互斥锁 ★★★
-    usart1_tx_mutex = xSemaphoreCreateMutex();
-    if (usart1_tx_mutex == NULL) {
-        // 创建失败，系统无法运行
-        while(1);
-    }
     UsartPrintf(USART1, "\r\n========== USART Init OK ==========\r\n");
     UsartPrintf(USART1, "USART1: Debug @ %d\r\n", USART1_BAUDRATE);
     UsartPrintf(USART1, "USART2: ESP8266 @ %d\r\n", USART2_BAUDRATE);
@@ -273,23 +271,33 @@ void Usart_Init(void)
 // ===== 串口发送函数 =====
 // ================================================================
 
+
 void Usart_SendString(USART_TypeDef *USARTx, unsigned char *str, unsigned short len)
 {
-    
+    SemaphoreHandle_t lock = NULL;
+
+    // 只有串口 1 需要互斥量
+    if (USARTx == USART1) {
+        lock = xUart1Mutex;
+        if (xSemaphoreTake(lock, pdMS_TO_TICKS(1000)) != pdTRUE) {
+            return;   // 拿不到锁，放弃本次发送
+        }
+    }
+
     for (unsigned short i = 0; i < len; i++) {
         USART_SendData(USARTx, str[i]);
-        
-        // ★★★ 超时保护，防止 TXE 一直不置位 ★★★
+
         uint32_t timeout = 100000;
         while (USART_GetFlagStatus(USARTx, USART_FLAG_TXE) == RESET) {
             if (--timeout == 0) {
-                // 超时，放弃本次发送
-                LED1=0;
+                BEEP = BEEP_ON;
+                if (lock) xSemaphoreGive(lock);   // 出错也要释放锁
                 return;
             }
         }
     }
-    
+
+    if (lock) xSemaphoreGive(lock);
 }
 
 // ================================================================
@@ -318,15 +326,5 @@ void UsartPrintf(USART_TypeDef *USARTx, char *fmt, ...)
     if (len >= sizeof(buf)) len = sizeof(buf) - 1;
     buf[len] = '\0';
     va_end(ap);
-    // // ★★★ 对 USART1 加互斥锁 ★★★
-    // if (USARTx == USART1 && usart1_tx_mutex != NULL) {
-    //     xSemaphoreTake(usart1_tx_mutex, portMAX_DELAY);
-    // }
-    
-    Usart_SendString(USARTx, (unsigned char*)buf, len);
-    
-    // // ★★★ 释放锁 ★★★
-    // if (USARTx == USART1 && usart1_tx_mutex != NULL) {
-    //     xSemaphoreGive(usart1_tx_mutex);
-    // }
+    Usart_SendString(USARTx, (unsigned char*)buf, len); 
 }
