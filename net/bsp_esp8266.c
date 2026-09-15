@@ -8,6 +8,7 @@
 #include "bsp_usart.h"
 #include "delay.h"
 #include <string.h>
+#include <led.h>
 
 
 /*==============================================================================
@@ -22,7 +23,21 @@ uint8 mqttPacket_data[512];
 // volatile uint8_t g_wifi_connected = 0;
 // volatile uint8_t g_mqtt_connected = 0;  // ★★★ 新增
 
+// ================================================================
+// ★ 全局互斥锁（在文件顶部定义）
+// ================================================================
+static SemaphoreHandle_t mqtt_publish_mutex = NULL;
 
+// ================================================================
+// ★ 初始化互斥锁（在 ESP8266_Init 中调用）
+// ================================================================
+void ESP8266_MQTT_Mutex_Init(void)
+{
+    mqtt_publish_mutex = xSemaphoreCreateMutex();
+    if (mqtt_publish_mutex == NULL) {
+        UsartPrintf(USART1, "[ESP8266] MQTT mutex create failed!\r\n");
+    }
+}
 
 
 /*==============================================================================
@@ -44,7 +59,7 @@ Net_Status_t ESP8266_GetStatus(void)
  */
 void ESP8266_Init(void)
 {
-    
+    ESP8266_MQTT_Mutex_Init();
     UsartPrintf(USART1, "[ESP8266] Init OK\r\n");
 }
 
@@ -65,10 +80,11 @@ uint8_t ESP8266_SendCmd(const char *cmd)
     
     /* 发送指令 + \r\n */
     ESP8266_Clear_AT();
+    
     Usart_SendString(USART2, (unsigned char*)cmd, strlen(cmd));
     Usart_SendString(USART2, (unsigned char*)"\r\n", 2);
     
-    
+   
     
     return 1;
 }
@@ -524,26 +540,92 @@ uint8_t ESP8266_MQTT_Connect(const char *prod_id, const char *dev_name, const ch
  * @param qos     QoS等级（0或1）
  * @return 1=成功，0=失败
  */
-uint8_t ESP8266_MQTT_Publish(const char *topic, const char *payload, uint8_t qos)
-{
-    //
+// uint8_t ESP8266_MQTT_Publish(const char *topic, const char *payload, uint8_t qos)
+// {
+//     //
     
-    uint8_t result;
+//     uint8_t result;
     
-    if (g_net_status != NET_STATUS_CONNECTED) {
-        UsartPrintf(USART1, "[Error] Not connected\r\n");
-        subscribed = 0;  // ★ 断开时重置订阅标志
-        return 0;
-    }
+//     if (g_net_status != NET_STATUS_CONNECTED) {
+//         UsartPrintf(USART1, "[Error] Not connected\r\n");
+//         subscribed = 0;  // ★ 断开时重置订阅标志
+//         return 0;
+//     }
     
    
     
     
     
-    result = MQTT_PacketPublish(MQTT_PUBLISH_ID	, topic, payload, strlen(payload), MQTT_QOS_LEVEL0, 0, 1, &mqttPacket);
+//     result = MQTT_PacketPublish(MQTT_PUBLISH_ID	, topic, payload, strlen(payload), MQTT_QOS_LEVEL0, 0, 1, &mqttPacket);
+//     if (result != 0) {
+//         UsartPrintf(USART1, "[Error] PacketPublish failed: %d\r\n", result);
+//         return 0;
+//     }
+    
+//     UsartPrintf(USART1, "[MQTT] Publish: %s\r\n", topic);
+//     UsartPrintf(USART1, "[MQTT] Payload: %s\r\n", payload);
+    
+//     if (!ESP8266_TCP_Send((const char*)mqttPacket._data, mqttPacket._len)) {
+//         UsartPrintf(USART1, "[Error] Send PUBLISH failed\r\n");
+//         MQTT_DeleteBuffer(&mqttPacket);
+//         return 0;
+//     }
+    
+//     MQTT_DeleteBuffer(&mqttPacket);
+    
+//     /* QoS=1 等待 PUBACK */
+//     if (qos == 1) {
+//         ESP8266_Msg_t msg;
+//         for (int i = 0; i < 20; i++) {
+//             if (ESP8266_GetMQTTMsg(&msg, pdMS_TO_TICKS(100)) == pdTRUE) {
+//                 char *ipd_start = strstr((char*)msg.data, "+IPD,");
+//                 uint8_t *pData = msg.data;
+//                 if (ipd_start != NULL) {
+//                     char *colon = strchr(ipd_start, ':');
+//                     if (colon != NULL) {
+//                         pData = (uint8_t*)(colon + 1);
+//                     }
+//                 }
+//                 /* PUBACK 固定头部是 0x40 */
+//                 if ((pData[0] & 0xF0) == 0x40) {
+//                     UsartPrintf(USART1, "[MQTT] PUBACK received\r\n");
+//                     break;
+//                 }
+//             }
+//             delay_ms(10);
+//         }
+//     }
+    
+//     return 1;
+// }
+// ================================================================
+// ★ 加锁后的 ESP8266_MQTT_Publish
+// ================================================================
+uint8_t ESP8266_MQTT_Publish(const char *topic, const char *payload, uint8_t qos)
+{
+    uint8_t result;
+    
+    if (g_net_status != NET_STATUS_CONNECTED) {
+        UsartPrintf(USART1, "[Error] Not connected\r\n");
+        subscribed = 0;
+        return 0;
+    }
+    
+    // ★★★ 获取互斥锁 ★★★
+    if (mqtt_publish_mutex != NULL) {
+        if (xSemaphoreTake(mqtt_publish_mutex, pdMS_TO_TICKS(10000)) != pdTRUE) {
+            UsartPrintf(USART1, "[Error] MQTT publish mutex timeout\r\n");
+            return 0;
+        }
+    }
+    
+    // ==================== 以下代码在锁内 ====================
+    
+    result = MQTT_PacketPublish(MQTT_PUBLISH_ID, topic, payload, strlen(payload), 
+                                MQTT_QOS_LEVEL0, 0, 1, &mqttPacket);
     if (result != 0) {
         UsartPrintf(USART1, "[Error] PacketPublish failed: %d\r\n", result);
-        return 0;
+        goto exit;
     }
     
     UsartPrintf(USART1, "[MQTT] Publish: %s\r\n", topic);
@@ -552,35 +634,25 @@ uint8_t ESP8266_MQTT_Publish(const char *topic, const char *payload, uint8_t qos
     if (!ESP8266_TCP_Send((const char*)mqttPacket._data, mqttPacket._len)) {
         UsartPrintf(USART1, "[Error] Send PUBLISH failed\r\n");
         MQTT_DeleteBuffer(&mqttPacket);
-        return 0;
+        result = 0;
+        goto exit;
     }
     
     MQTT_DeleteBuffer(&mqttPacket);
     
-    /* QoS=1 等待 PUBACK */
-    if (qos == 1) {
-        ESP8266_Msg_t msg;
-        for (int i = 0; i < 20; i++) {
-            if (ESP8266_GetMQTTMsg(&msg, pdMS_TO_TICKS(100)) == pdTRUE) {
-                char *ipd_start = strstr((char*)msg.data, "+IPD,");
-                uint8_t *pData = msg.data;
-                if (ipd_start != NULL) {
-                    char *colon = strchr(ipd_start, ':');
-                    if (colon != NULL) {
-                        pData = (uint8_t*)(colon + 1);
-                    }
-                }
-                /* PUBACK 固定头部是 0x40 */
-                if ((pData[0] & 0xF0) == 0x40) {
-                    UsartPrintf(USART1, "[MQTT] PUBACK received\r\n");
-                    break;
-                }
-            }
-            delay_ms(10);
-        }
+    
+    
+    result = 1;
+    
+    // ==================== 锁内代码结束 ====================
+    
+exit:
+    // ★★★ 释放互斥锁 ★★★
+    if (mqtt_publish_mutex != NULL) {
+        xSemaphoreGive(mqtt_publish_mutex);
     }
     
-    return 1;
+    return result;
 }
 
 /**

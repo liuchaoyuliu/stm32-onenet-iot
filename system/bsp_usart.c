@@ -73,7 +73,7 @@ static void ESP8266_DispatchFrame(uint8_t *data, uint16_t len)
                 msg.len = at_len;
                 memcpy(msg.data, data, at_len);
                 msg.data[at_len] = 0;
-                xQueueSend(esp8266_at_queue, &msg, 0);
+                xQueueSendFromISR(esp8266_at_queue, &msg, 0);
             }
         }
         
@@ -84,7 +84,7 @@ static void ESP8266_DispatchFrame(uint8_t *data, uint16_t len)
             //UsartPrintf(USART1, "[Frame] %.*s\r\n", mqtt_len, ipd_pos);
             memcpy(msg.data, ipd_pos, mqtt_len);
             msg.data[mqtt_len] = 0;
-            xQueueSend(esp8266_mqtt_queue, &msg, 0);
+            xQueueSendFromISR(esp8266_mqtt_queue, &msg, 0);
         }
         
     } else {
@@ -92,7 +92,7 @@ static void ESP8266_DispatchFrame(uint8_t *data, uint16_t len)
         msg.len = len;
         memcpy(msg.data, data, len);
         msg.data[len] = 0;
-        xQueueSend(esp8266_at_queue, &msg, 0);
+        xQueueSendFromISR(esp8266_at_queue, &msg, 0);
     }
 }
 
