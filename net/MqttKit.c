@@ -250,10 +250,14 @@ uint8 MQTT_UnPacketRecv(uint8 *dataPtr)
 //				devid：设备ID
 //				cTime：连接保持时间
 //				clean_session：离线消息清除标志
+//遗嘱消息区域
 //				qos：重发标志
 //				will_topic：异常离线topic
 //				will_msg：异常离线消息
 //				will_retain：消息推送标志
+				// 0	不保留，只转发给当前订阅者
+				// 1	保留，新订阅者上线时立即收到这条消息
+//遗嘱消息区域
 //				mqttPacket：包指针
 //
 //	返回参数：	0-成功		其他-失败
@@ -924,19 +928,19 @@ uint8 MQTT_PacketPublish(uint16 pkt_id, const int8 *topic,
 	if(pkt_id == 0)
 		return 1;
 	
-	//$dp为系统上传数据点的指令--------------------------------------------------------------
+	// topic 合法性检查--------------------------------------------------------------
 	for(topic_len = 0; topic[topic_len] != '\0'; ++topic_len)
 	{
 		if((topic[topic_len] == '#') || (topic[topic_len] == '+'))
 			return 2;
 	}
 	
-	//Publish消息---------------------------------------------------------------------------
-	flags |= MQTT_PKT_PUBLISH << 4;
+	//组装固定头第一个字节 flags---------------------------------------------------------------------------
+	flags |= MQTT_PKT_PUBLISH << 4;//固定头第一个字节的高4位是消息类型
 	
 	//retain标志----------------------------------------------------------------------------
-	if(retain)
-		flags |= 0x01;
+	if(retain)//retain标志位，表示是否保留消息
+		flags |= 0x01;//retain标志位
 	
 	//总长度--------------------------------------------------------------------------------
 	total_len = topic_len + payload_len + 2;

@@ -5,7 +5,7 @@
 // ================================================================
 
 // ★ 传感器数据（所有任务共享）
-SensorData_t g_sensorData = {
+volatile SensorData_t g_sensorData = {
     .temp_int = 0,
     .humi_int = 0,
     .led_flag = 0,

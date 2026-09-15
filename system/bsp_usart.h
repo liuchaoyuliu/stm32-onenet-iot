@@ -26,7 +26,10 @@
 // ================================================================
 #define ESP8266_MSG_QUEUE_LEN   10
 #define ESP8266_MSG_MAX_LEN     256
-
+// ★ ESP8266 RST 引脚
+#define ESP8266_RST_PORT    GPIOG
+#define ESP8266_RST_PIN     GPIO_Pin_5
+#define ESP8266_RST_RCC     RCC_APB2Periph_GPIOG
 // ================================================================
 // ===== 消息结构体 =====
 // ================================================================
@@ -45,6 +48,7 @@ extern SemaphoreHandle_t xUart1Mutex;   // 声明，给其他文件用
 // ===== 函数声明 =====
 // ================================================================
 void Usart_Init(void);
+void ESP8266_RST_Init(void);
 void Usart_SendString(USART_TypeDef *USARTx, unsigned char *str, unsigned short len);
 void UsartPrintf(USART_TypeDef *USARTx, char *fmt, ...);
 BaseType_t ESP8266_GetATMsg(ESP8266_Msg_t *msg, TickType_t waitTicks);

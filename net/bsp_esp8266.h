@@ -21,6 +21,14 @@
 #define ONENET_PRODID            "SQ8gfZ73EX"
 #define ONENET_DEVNAME           "Test1"
 #define ONENET_APIKEY            "version=2018-10-31&res=products%2FSQ8gfZ73EX%2Fdevices%2FTest1&et=1808203155&method=md5&sign=Mrht4QnQ3ikjKwGVh4XZVQ%3D%3D"
+#define ONENET_KEEPALIVE         600
+//ONENET不支持clean session为0,所以设置为1
+#define ONENET_CLEAN_SESSION       1 //ONENET只支持1
+//遗嘱消息配置,onenet不支持遗嘱消息,所以设置为0
+#define ONENET_WILL_QOS               0
+#define ONENET_WILL_RETAIN           0
+#define ONENET_WILL_TOPIC         NULL
+#define ONENET_WILL_MSG           NULL
 
 #define ONENET_TOPIC_PROPERTY_SET   "$sys/"ONENET_PRODID"/"ONENET_DEVNAME"/thing/property/set"
 #define ONENET_TOPIC_PROPERTY_REPLY "$sys/"ONENET_PRODID"/"ONENET_DEVNAME"/thing/property/reply"
@@ -208,4 +216,5 @@ uint8_t ESP8266_MQTT_Ping(void);
 void ESP8266_Clear_All(void);
 void ESP8266_Clear_AT(void);
 void ESP8266_ExitTransparent(void);
+void ESP8266_HardReset(void);
 #endif /* __BSP_ESP8266_H */

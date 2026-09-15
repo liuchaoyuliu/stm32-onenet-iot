@@ -244,28 +244,14 @@ uint8_t ESP8266_ConnectWiFi(const char *ssid, const char *password)
     UsartPrintf(USART1, "========================================\r\n");
     UsartPrintf(USART1, "[SSID] %s\r\n", ssid);
     UsartPrintf(USART1, "[PWD]  %s\r\n", password);
-    //ESP8266_ExitTransparent();
-    
-    // // ===== 第0步：发送 AT+RST 软复位 =====
-    // ESP8266_SendCmd("AT+RST");
-    // // ★★★ 不是死等 3 秒，而是等待 "ready" 字符串 ★★★
-    // if (!ESP8266_WaitResponse("ready", 10000)) {
-    //     UsartPrintf(USART1, "[Error] ESP8266 reset timeout\r\n");
-    //     return 0;
-    // }
+     // ★★★ 先硬复位 ESP8266 ★★★
+    ESP8266_HardReset();
      // ★★★ 清空启动日志残留 ★★★
     ESP8266_Clear_AT();
     UsartPrintf(USART1, "[Step 0] ESP8266 ready!\r\n");
 
     // ★★★ 额外等待 200ms，让系统完全稳定 ★★★
     delay_ms(200);
-    //  // ===== 第0.5步：先断开已有连接（避免冲突） =====
-    // UsartPrintf(USART1, "\r\n[Step 0.5] Disconnect old WiFi...\r\n");
-    
-    // if (!ESP8266_SendCmdWait("AT+CWQAP", "OK", 2000)) {
-    //     UsartPrintf(USART1, "[Warning] CWQAP failed, clearing queue\r\n");
-        
-    // }
     ESP8266_Clear_AT();  // ★ 失败时清空
     /* ===== 第1步：AT测试 ===== */
     UsartPrintf(USART1, "\r\n[Step 1] AT Test...\r\n");
@@ -491,11 +477,13 @@ uint8_t ESP8266_MQTT_Connect(const char *prod_id, const char *dev_name, const ch
     result = MQTT_PacketConnect(
         prod_id,        // username
         api_key,        // password
-        client_id,      // clientID
-        256,            // KeepAlive
-        1,              // Clean Session
-        MQTT_QOS_LEVEL0,
-        NULL, NULL, 0,
+        dev_name,      // clientID
+        ONENET_KEEPALIVE,            // KeepAlive
+        ONENET_CLEAN_SESSION,              // Clean Session
+        ONENET_WILL_QOS,
+        ONENET_WILL_TOPIC,
+        ONENET_WILL_MSG,
+        ONENET_WILL_RETAIN,
         &mqttPacket
     );
     
@@ -730,4 +718,18 @@ void ESP8266_ExitTransparent(void)
     } else {
         UsartPrintf(USART1, "[ESP8266] Exit transparent FAILED\r\n");
     }
+}
+void ESP8266_HardReset(void)
+{
+    
+    
+    // ★ 拉低 100ms
+    GPIO_ResetBits(ESP8266_RST_PORT, ESP8266_RST_PIN);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    
+    // ★ 拉高，等待 ESP8266 启动
+    GPIO_SetBits(ESP8266_RST_PORT, ESP8266_RST_PIN);
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    
+    UsartPrintf(USART1, "[ESP8266] Reset done\r\n");
 }

@@ -141,7 +141,20 @@ void Usart1_Init(unsigned int baud)
         while(1); // 创建失败，系统无法运行
     }
 }
-
+void ESP8266_RST_Init(void)
+{
+    GPIO_InitTypeDef GPIO_InitStruct;
+    
+    RCC_APB2PeriphClockCmd(ESP8266_RST_RCC, ENABLE);
+    
+    GPIO_InitStruct.GPIO_Pin = ESP8266_RST_PIN;
+    GPIO_InitStruct.GPIO_Mode = GPIO_Mode_Out_PP;   // 推挽输出
+    GPIO_InitStruct.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(ESP8266_RST_PORT, &GPIO_InitStruct);
+    
+    // ★ 默认拉高（ESP8266 正常工作）
+    GPIO_SetBits(ESP8266_RST_PORT, ESP8266_RST_PIN);
+}
 // ================================================================
 // ===== 串口2初始化（ESP8266）+ DMA + IDLE中断 =====
 // ================================================================
@@ -156,7 +169,7 @@ void Usart2_Init(unsigned int baud)
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
     RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
-    
+    ESP8266_RST_Init();
     // --- 2. GPIO初始化 ---
     // PA2 TXD
     gpioInitStruct.GPIO_Mode = GPIO_Mode_AF_PP;

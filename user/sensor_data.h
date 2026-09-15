@@ -19,7 +19,7 @@ typedef struct {
 } SensorData_t;
 
 // ★ 全局变量声明
-extern SensorData_t g_sensorData;
+extern volatile SensorData_t g_sensorData;
 extern SemaphoreHandle_t g_dataMutex;
 
 #endif
