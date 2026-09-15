@@ -71,6 +71,13 @@ void System_Init(void)
     LED_Init();
     DHT11_Init();
     BEEP_Init();
+     // ★★★ 初始化 cJSON 内存钩子 ★★★
+    cJSON_Hooks hooks;
+    hooks.malloc_fn = pvPortMalloc;   // FreeRTOS 的 malloc
+    hooks.free_fn   = vPortFree;      // FreeRTOS 的 free
+    cJSON_InitHooks(&hooks);
+    
+    UsartPrintf(USART1, "[cJSON] Hooks installed, heap: %d\r\n", xPortGetFreeHeapSize());
 }
 // ================================================================
 // wifi_manager.c 或 main.c 中
@@ -373,7 +380,11 @@ void OneNET_ProcessCommand(char *topic, char *payload, uint16_t len)
         UsartPrintf(USART1, "[OneNET] Not property set topic, ignore\r\n");
         return;
     }
-    
+    UsartPrintf(USART1, "[OneNET] Payload HEX: ");
+    for (int i = 0; i < len + 5; i++) {   // ★ 多打印 5 个字节，看后面是什么
+        UsartPrintf(USART1, "%02X ", payload[i]);
+    }
+    UsartPrintf(USART1, "\r\n");
     // ★ 2. 解析 JSON
     json = cJSON_Parse(payload);
     if (json == NULL) {
